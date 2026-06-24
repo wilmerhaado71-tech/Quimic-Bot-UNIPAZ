@@ -1,0 +1,78 @@
+"use client";
+import { useState } from "react";
+
+export default function Home() {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const sendMessage = async () => {
+    if (!input.trim()) return;
+    
+    const userMessage = { role: "user", parts: [{ text: input }] };
+    setMessages((prev) => [...prev, { sender: "user", text: input }]);
+    setInput("");
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: input,
+          history: messages.map(m => ({ role: m.sender === "user" ? "user" : "model", parts: [{ text: m.text }] }))
+        })
+      });
+      const data = await res.json();
+      
+      // Limpiar el formato JSON estructurado del backend si es necesario
+      let botText = data.response;
+      if (botText.includes('"response"')) {
+        try { botText = JSON.parse(botText).response; } catch(e) {}
+      }
+
+      setMessages((prev) => [...prev, { sender: "model", text: botText }]);
+    } catch (error) {
+      console.error("Error en la conexión:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-gray-900 text-white font-sans">
+      {/* Encabezado Institucional */}
+      <header className="p-4 bg-green-800 shadow-md text-center">
+        <h1 className="text-xl font-bold">Químic-Bot UNIPAZ 🧪</h1>
+        <p className="text-xs text-green-200">Programa de Química - Acreditación de Alta Calidad</p>
+      </header>
+
+      {/* Ventana de Conversación */}
+      <main className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((msg, index) => (
+          <div key={index} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
+            <div className={`max-w-xs md:max-w-md rounded-lg p-3 ${msg.sender === "user" ? "bg-green-600 text-white" : "bg-gray-800 text-gray-100"}`}>
+              {msg.text}
+            </div>
+          </div>
+        ))}
+        {loading && <p className="text-xs text-gray-400 animate-pulse">Químic-Bot está pensando...</p>}
+      </main>
+
+      {/* Entrada de Texto */}
+      <footer className="p-4 bg-gray-800 flex gap-2">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+          placeholder="Pregúntame sobre el programa de Química o Laboratorios..."
+          className="flex-1 p-2 rounded bg-gray-700 border border-gray-600 text-white focus:outline-none focus:border-green-500"
+        />
+        <button onClick={sendMessage} className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded font-bold">
+          Enviar
+        </button>
+      </footer>
+    </div>
+  );
+}
