@@ -1,0 +1,53 @@
+import { GoogleGenAI } from "@google/generative-ai";
+import { createClient } from "@supabase/supabase-js";
+
+// Inicializar Supabase y Google AI de forma segura con variables de entorno
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+const ai = new GoogleGenAI(process.env.GEMINI_API_KEY);
+
+export async function POST(req) {
+  try {
+    const { message, history, studentData } = await req.json();
+
+    // 1. Si el estudiante dejó datos (Nombre, Celular), guardarlos de una vez en Supabase (Cumpliendo Habeas Data)
+    if (studentData) {
+      await supabase.from("leads_unipaz").insert([
+        { 
+          nombre: studentData.nombre, 
+          celular: studentData.celular,
+          fecha_registro: new Date().toISOString()
+        }
+      ]);
+    }
+
+    // 2. Configurar el modelo tal cual como lo definiste en el Playground de AI Studio
+    const model = ai.getGenerativeModel({ 
+      model: "gemini-1.5-flash", // O "gemini-3.5-flash" según la disponibilidad en tu entorno
+      generationConfig: { temperature: 0.2 } 
+    });
+
+    // 3. El "Cerebro" -> Aquí pegas exactamente tu Prompt Maestro de los 5 Estados
+    const systemInstruction = `
+    # PERSONAJE E IDENTIDAD
+    Actúas como "Químic-Bot", el asistente virtual omnicanal oficial del programa de Química de la UNIPAZ...
+    [PEGA AQUÍ EL RESTO DE TU PROMPT MAESTRO COMPLETO]
+    `;
+
+    // 4. Ejecutar la consulta al modelo manteniendo el historial de la conversación
+    const chat = model.startChat({
+      history: history || [],
+      systemInstruction: systemInstruction
+    });
+
+    const result = await chat.sendMessage(message);
+    const responseText = result.response.text();
+
+    return new Response(JSON.stringify({ response: responseText }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+  }
+}
